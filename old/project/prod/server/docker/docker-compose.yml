@@ -1,0 +1,169 @@
+services:
+  reverseproxy:
+    image: nginx:1.27-alpine
+    container_name: rs-reverseproxy-${REDSNAKE_ENV}
+    env_file:
+      - ../../conf/.env
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "${OUTSIDE_PORT}:443"
+    environment:
+      OUTSIDE_FQDN: ${OUTSIDE_FQDN}
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - ../../conf/server-certs:/etc/nginx/certs:ro
+    networks:
+      - appnet
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../app
+      dockerfile: ../docker/flask/Dockerfile
+    container_name: rs-web-${REDSNAKE_ENV}
+    env_file:
+      - ../../conf/.env
+    environment:
+      FLASK_ENV: ${FLASK_ENV}
+      PORT: "8000"
+      DATABASE_URL: ${DATABASE_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      REDIS_URL: ${REDIS_URL}
+      SCRIPTS_DIR: ${SCRIPTS_DIR}
+      VAULT_FILE: ${VAULT_FILE}
+      SECRET_KEY: ${SECRET_KEY}
+    command: >
+      sh -c "gunicorn -w ${GUNICORN_WORKERS:-3} -k gthread
+      --threads ${GUNICORN_THREADS:-8}
+      -b 0.0.0.0:8000
+      --access-logfile -
+      --error-logfile -
+      'app:create_app()'"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+    volumes:
+      - ../../scripts:/app/scripts:ro
+      - vault_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - appnet
+    restart: unless-stopped
+
+  celery:
+    build:
+      context: ../app
+      dockerfile: ../docker/flask/Dockerfile
+    container_name: rs-celery-${REDSNAKE_ENV}
+    env_file:
+      - ../../conf/.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      REDIS_URL: ${REDIS_URL}
+      SCRIPTS_DIR: ${SCRIPTS_DIR}
+      VAULT_FILE: ${VAULT_FILE}
+      SECRET_KEY: ${SECRET_KEY}
+    command: >
+      sh -c "celery -A app.celery_app worker
+      --loglevel=${CELERY_LOGLEVEL:-INFO}
+      --concurrency=${CELERY_CONCURRENCY:-4}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../scripts:/app/scripts:ro
+      - vault_data:/app/data
+    networks:
+      - appnet
+    restart: unless-stopped
+
+  celery-beat:
+    build:
+      context: ../app
+      dockerfile: ../docker/flask/Dockerfile
+    container_name: rs-celery-beat-${REDSNAKE_ENV}
+    env_file:
+      - ../../conf/.env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+      SCRIPTS_DIR: ${SCRIPTS_DIR}
+      VAULT_FILE: ${VAULT_FILE}
+      SECRET_KEY: ${SECRET_KEY}
+    command: >
+      sh -c "celery -A app.celery_app beat
+      --loglevel=${CELERY_LOGLEVEL:-INFO}
+      --pidfile= -s /tmp/celerybeat-schedule"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../scripts:/app/scripts:ro
+      - vault_data:/app/data
+    networks:
+      - appnet
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: rs-redis-${REDSNAKE_ENV}
+    env_file:
+      - ../../conf/.env
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--no-auth-warning", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - appnet
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rs-postgres-${REDSNAKE_ENV}
+    env_file:
+      - ../../conf/.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - appnet
+    restart: unless-stopped
+
+networks:
+  appnet:
+    driver: bridge
+
+volumes:
+  pg_data:
+  redis_data:
+  vault_data:

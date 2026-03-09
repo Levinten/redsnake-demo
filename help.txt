@@ -1,0 +1,9 @@
+deactivate
+rm -rf /home/levinten/redsnake/venvs/testing
+python3 -m venv /home/levinten/redsnake/venvs/testing
+source /home/levinten/redsnake/venvs/testing/bin/activate
+
+source /home/levinten/redsnake/venvs/testing/bin/activate
+cd /home/levinten/redsnake/git/redsnake
+pip install -e .
+cd /home/levinten/redsnake/git/redsnake-demo

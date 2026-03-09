@@ -1,0 +1,22 @@
+{
+  "environments": {
+    "prod": {
+      "install_dir": "./prod",
+      "name": "RedSnake",
+      "outside_fqdn": "localhost",
+      "outside_port": 443
+    },
+    "test": {
+      "install_dir": "./test",
+      "name": "RedSnake",
+      "outside_fqdn": "localhost",
+      "outside_port": 443
+    },
+    "dev": {
+      "install_dir": "./dev",
+      "name": "RedSnake",
+      "outside_fqdn": "localhost",
+      "outside_port": 443
+    }
+  }
+}
