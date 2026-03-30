@@ -1,0 +1,102 @@
+services:
+
+  # ── Active services ────────────────────────────────────────
+
+  redsnake-postgres-user:
+    image: postgres:16-alpine
+    container_name: redsnake-dev-postgres-user
+    restart: unless-stopped
+    env_file:
+      - my.env
+    environment:
+      POSTGRES_DB: redsnake_user
+      POSTGRES_USER: redsnake
+      POSTGRES_PASSWORD: ${POSTGRES_USER_PASSWORD:-dev_password}
+    ports:
+      - "${POSTGRES_USER_PORT:-5433}:5432"
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redsnake -d redsnake_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redsnake-redis:
+    image: redis:7-alpine
+    container_name: redsnake-dev-redis
+    restart: unless-stopped
+    env_file:
+      - my.env
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Commented out — enable when the full server stack is needed ──
+
+  # redsnake-postgres-system:
+  #   image: postgres:16-alpine
+  #   container_name: redsnake-dev-postgres-system
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: redsnake_system
+  #     POSTGRES_USER: redsnake
+  #     POSTGRES_PASSWORD: ${POSTGRES_SYSTEM_PASSWORD:-dev_password}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_system_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U redsnake -d redsnake_system"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # redsnake-app:
+  #   image: redsnake:latest
+  #   container_name: redsnake-dev-app
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - ../:/project:ro
+  #   env_file:
+  #     - my.env
+  #   environment:
+  #     REDSNAKE_ENV: dev
+  #     REDSNAKE_WATCH: "true"
+  #     USER_DATABASE_URL: postgresql+psycopg2://redsnake:${POSTGRES_USER_PASSWORD:-dev_password}@redsnake-postgres-user:5432/redsnake_user
+  #     SYSTEM_DATABASE_URL: postgresql+psycopg2://redsnake:${POSTGRES_SYSTEM_PASSWORD:-dev_password}@redsnake-postgres-system:5432/redsnake_system
+  #     REDIS_URL: redis://redsnake-redis:6379/0
+  #   depends_on:
+  #     redsnake-redis:
+  #       condition: service_healthy
+  #     redsnake-postgres-user:
+  #       condition: service_healthy
+  #     redsnake-postgres-system:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+  # redsnake-celery:
+  #   image: redsnake:latest
+  #   container_name: redsnake-dev-celery
+  #   command: celery -A celery_app worker --loglevel=info
+  #   env_file:
+  #     - my.env
+  #   environment:
+  #     CELERY_BROKER_URL: redis://redsnake-redis:6379/0
+  #     CELERY_RESULT_BACKEND: redis://redsnake-redis:6379/0
+  #   depends_on:
+  #     redsnake-redis:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+
+volumes:
+  postgres_user_data:
+  # postgres_system_data:
+  redis_data:

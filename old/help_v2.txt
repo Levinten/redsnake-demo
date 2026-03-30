@@ -1,3 +1,0 @@
-cd /home/levinten/redsnake/git/redsnake/setup
-sudo DEV_MODULE_PATH=.. ./install.sh
-redsnake verify
