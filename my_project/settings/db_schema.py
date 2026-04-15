@@ -1,0 +1,1 @@
+# Here should the user define the database schema for their project. This can include table definitions, relationships, and any other relevant information about the database structure.
